@@ -86,7 +86,7 @@ private:
     std::vector<float> peakHoldTimersSec;
 
     // Double-buffered local frame snapshot for UI thread
-    std::atomic<std::shared_ptr<const InstanceSpectralFrame>> publishedLocalFrame;
+    std::shared_ptr<const InstanceSpectralFrame> publishedLocalFrame;
 
     // Working frame
     InstanceSpectralFrame workingFrame;

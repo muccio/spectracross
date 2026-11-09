@@ -68,7 +68,7 @@ public:
                 const int octave = (note / 12) - 1;
                 g.setColour(juce::Colour(0xFF1B2631));
                 g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
-                g.drawText("C" + juce::String(octave), x1, h - 11.0f, keyWidth, 10.0f, juce::Justification::centred);
+                g.drawText("C" + juce::String(octave), juce::Rectangle<float>(x1, h - 11.0f, keyWidth, 10.0f), juce::Justification::centred);
             }
         }
 

@@ -17,7 +17,9 @@ if(APPLE)
 endif()
 
 # Check for local JUCE install or fetch via FetchContent
-if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../JUCE/CMakeLists.txt")
+if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/JUCE/CMakeLists.txt")
+    add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/JUCE" JUCE)
+elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/../JUCE/CMakeLists.txt")
     add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/../JUCE" JUCE)
 elseif(EXISTS "/home/antigravity/JUCE/CMakeLists.txt")
     add_subdirectory("/home/antigravity/JUCE" JUCE)
@@ -48,7 +50,7 @@ juce_add_plugin(SpectraCross
     BUNDLE_ID "com.acrosonic.spectracross"
     PLUGIN_DESCRIPTION "Surgical Multi-Instance Spectral Analyzer & Masking Engine"
     VST3_CATEGORIES "Fx" "Analyzer"
-    AU_MAIN_TYPE "'aufx'"
+    AU_MAIN_TYPE kAudioUnitType_Effect
     AU_EXPORT_PREFIX SpectraCrossAU
 )
 

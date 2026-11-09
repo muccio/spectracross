@@ -12,7 +12,7 @@ InstanceHub& InstanceHub::getInstance()
 InstanceHub::InstanceHub()
 {
     auto initialMap = std::make_shared<InstanceSnapshotMap>();
-    currentSnapshot.store(initialMap, std::memory_order_relaxed);
+    std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(initialMap), std::memory_order_relaxed);
 }
 
 void InstanceHub::registerInstance(const juce::Uuid& id,
@@ -22,7 +22,7 @@ void InstanceHub::registerInstance(const juce::Uuid& id,
 {
     std::lock_guard<std::mutex> lock(mutateMutex);
 
-    auto oldMap = currentSnapshot.load(std::memory_order_relaxed);
+    auto oldMap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_relaxed);
     auto newMap = std::make_shared<InstanceSnapshotMap>(*oldMap);
 
     // Check if already registered
@@ -50,14 +50,14 @@ void InstanceHub::registerInstance(const juce::Uuid& id,
         *it = updated;
     }
 
-    currentSnapshot.store(newMap, std::memory_order_release);
+    std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(newMap), std::memory_order_release);
 }
 
 void InstanceHub::unregisterInstance(const juce::Uuid& id)
 {
     std::lock_guard<std::mutex> lock(mutateMutex);
 
-    auto oldMap = currentSnapshot.load(std::memory_order_relaxed);
+    auto oldMap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_relaxed);
     auto newMap = std::make_shared<InstanceSnapshotMap>();
     newMap->reserve(oldMap->size());
 
@@ -69,7 +69,7 @@ void InstanceHub::unregisterInstance(const juce::Uuid& id)
         }
     }
 
-    currentSnapshot.store(newMap, std::memory_order_release);
+    std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(newMap), std::memory_order_release);
 }
 
 void InstanceHub::updateInstanceMetadata(const juce::Uuid& id,
@@ -80,7 +80,7 @@ void InstanceHub::updateInstanceMetadata(const juce::Uuid& id,
 {
     std::lock_guard<std::mutex> lock(mutateMutex);
 
-    auto oldMap = currentSnapshot.load(std::memory_order_relaxed);
+    auto oldMap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_relaxed);
     auto newMap = std::make_shared<InstanceSnapshotMap>(*oldMap);
 
     auto it = std::find_if(newMap->begin(), newMap->end(),
@@ -94,7 +94,7 @@ void InstanceHub::updateInstanceMetadata(const juce::Uuid& id,
         updated->trackIndex = trackIndex;
         updated->isBypassed = isBypassed;
         *it = updated;
-        currentSnapshot.store(newMap, std::memory_order_release);
+        std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(newMap), std::memory_order_release);
     }
 }
 
@@ -102,7 +102,7 @@ void InstanceHub::setInstanceVisibility(const juce::Uuid& id, bool isVisible)
 {
     std::lock_guard<std::mutex> lock(mutateMutex);
 
-    auto oldMap = currentSnapshot.load(std::memory_order_relaxed);
+    auto oldMap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_relaxed);
     auto newMap = std::make_shared<InstanceSnapshotMap>(*oldMap);
 
     auto it = std::find_if(newMap->begin(), newMap->end(),
@@ -113,7 +113,7 @@ void InstanceHub::setInstanceVisibility(const juce::Uuid& id, bool isVisible)
         auto updated = std::make_shared<InstanceSpectralFrame>(**it);
         updated->isVisibleInDisplay = isVisible;
         *it = updated;
-        currentSnapshot.store(newMap, std::memory_order_release);
+        std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(newMap), std::memory_order_release);
     }
 }
 
@@ -121,7 +121,7 @@ void InstanceHub::setInstanceSolo(const juce::Uuid& id, bool isSoloed)
 {
     std::lock_guard<std::mutex> lock(mutateMutex);
 
-    auto oldMap = currentSnapshot.load(std::memory_order_relaxed);
+    auto oldMap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_relaxed);
     auto newMap = std::make_shared<InstanceSnapshotMap>(*oldMap);
 
     auto it = std::find_if(newMap->begin(), newMap->end(),
@@ -132,7 +132,7 @@ void InstanceHub::setInstanceSolo(const juce::Uuid& id, bool isSoloed)
         auto updated = std::make_shared<InstanceSpectralFrame>(**it);
         updated->isSoloed = isSoloed;
         *it = updated;
-        currentSnapshot.store(newMap, std::memory_order_release);
+        std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(newMap), std::memory_order_release);
     }
 }
 
@@ -140,7 +140,7 @@ void InstanceHub::setInstanceMute(const juce::Uuid& id, bool isMuted)
 {
     std::lock_guard<std::mutex> lock(mutateMutex);
 
-    auto oldMap = currentSnapshot.load(std::memory_order_relaxed);
+    auto oldMap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_relaxed);
     auto newMap = std::make_shared<InstanceSnapshotMap>(*oldMap);
 
     auto it = std::find_if(newMap->begin(), newMap->end(),
@@ -151,7 +151,7 @@ void InstanceHub::setInstanceMute(const juce::Uuid& id, bool isMuted)
         auto updated = std::make_shared<InstanceSpectralFrame>(**it);
         updated->isMuted = isMuted;
         *it = updated;
-        currentSnapshot.store(newMap, std::memory_order_release);
+        std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(newMap), std::memory_order_release);
     }
 }
 
@@ -160,7 +160,7 @@ void InstanceHub::publishSpectralFrame(const juce::Uuid& id, const InstanceSpect
     std::lock_guard<std::mutex> lock(mutateMutex);
 
     const int64_t nowMs = juce::Time::currentTimeMillis();
-    auto oldMap = currentSnapshot.load(std::memory_order_relaxed);
+    auto oldMap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_relaxed);
     auto newMap = std::make_shared<InstanceSnapshotMap>();
     newMap->reserve(oldMap->size() + 1);
 
@@ -202,17 +202,17 @@ void InstanceHub::publishSpectralFrame(const juce::Uuid& id, const InstanceSpect
         newMap->push_back(created);
     }
 
-    currentSnapshot.store(newMap, std::memory_order_release);
+    std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(newMap), std::memory_order_release);
 }
 
 std::shared_ptr<const InstanceSnapshotMap> InstanceHub::getSnapshot() const noexcept
 {
-    return currentSnapshot.load(std::memory_order_acquire);
+    return std::atomic_load_explicit(&currentSnapshot, std::memory_order_acquire);
 }
 
 InstanceFramePtr InstanceHub::getInstanceFrame(const juce::Uuid& id) const noexcept
 {
-    auto snap = currentSnapshot.load(std::memory_order_acquire);
+    auto snap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_acquire);
     if (!snap) return nullptr;
 
     for (const auto& item : *snap)
@@ -225,7 +225,7 @@ InstanceFramePtr InstanceHub::getInstanceFrame(const juce::Uuid& id) const noexc
 
 int InstanceHub::getNumInstances() const noexcept
 {
-    auto snap = currentSnapshot.load(std::memory_order_acquire);
+    auto snap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_acquire);
     return snap ? static_cast<int>(snap->size()) : 0;
 }
 

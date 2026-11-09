@@ -184,7 +184,7 @@ void SpectrumComponent::drawGridAndScales(juce::Graphics& g, const juce::Rectang
         // Frequency Label at bottom
         g.setColour(juce::Colour(0x80FFFFFF));
         g.setFont(juce::FontOptions(10.0f).withStyle("Regular"));
-        g.drawText(pf.label, x - 18.0f, h - 18.0f, 36.0f, 16.0f, juce::Justification::centred);
+        g.drawText(pf.label, juce::Rectangle<float>(x - 18.0f, h - 18.0f, 36.0f, 16.0f), juce::Justification::centred);
     }
 
     // Horizontal dB lines
@@ -213,7 +213,7 @@ void SpectrumComponent::drawGridAndScales(juce::Graphics& g, const juce::Rectang
         g.setColour(juce::Colour(0x70FFFFFF));
         g.setFont(juce::FontOptions(9.0f));
         const juce::String dbText = (db > 0.0f ? "+" : "") + juce::String(static_cast<int>(db)) + " dB";
-        g.drawText(dbText, w - 44.0f, y - 8.0f, 40.0f, 16.0f, juce::Justification::centredRight);
+        g.drawText(dbText, juce::Rectangle<float>(w - 44.0f, y - 8.0f, 40.0f, 16.0f), juce::Justification::centredRight);
     }
 }
 
@@ -244,7 +244,7 @@ void SpectrumComponent::drawReferenceZones(juce::Graphics& g, const juce::Rectan
         g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
         g.setColour(baseCol.withAlpha(0.7f));
         g.drawText(juce::String(zone.name).toUpperCase(),
-                   x1 + 2.0f, 3.0f, zoneWidth - 4.0f, 14.0f,
+                   juce::Rectangle<float>(x1 + 2.0f, 3.0f, zoneWidth - 4.0f, 14.0f),
                    juce::Justification::centred, true);
     }
 }

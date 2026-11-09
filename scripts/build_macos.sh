@@ -42,8 +42,14 @@ cmake --build build_mac --config Release --parallel
 
 echo "Build complete!"
 echo "Artefacts generated:"
-ls -ld build_mac/SpectraCross_artefacts/AU/SpectraCross.component || true
-ls -ld build_mac/SpectraCross_artefacts/VST3/SpectraCross.vst3 || true
+AU_SRC="build_mac/SpectraCross_artefacts/Release/AU/SpectraCross.component"
+[ ! -d "$AU_SRC" ] && AU_SRC="build_mac/SpectraCross_artefacts/AU/SpectraCross.component"
+
+VST3_SRC="build_mac/SpectraCross_artefacts/Release/VST3/SpectraCross.vst3"
+[ ! -d "$VST3_SRC" ] && VST3_SRC="build_mac/SpectraCross_artefacts/VST3/SpectraCross.vst3"
+
+ls -ld "$AU_SRC" || true
+ls -ld "$VST3_SRC" || true
 
 # 5. Optional Installation into system plugin directories
 echo ""
@@ -56,8 +62,8 @@ if [[ $REPLY =~ ^[Yy]$ ]]; then
     rm -rf ~/Library/Audio/Plug-Ins/Components/SpectraCross.component
     rm -rf ~/Library/Audio/Plug-Ins/VST3/SpectraCross.vst3
     
-    cp -R build_mac/SpectraCross_artefacts/AU/SpectraCross.component ~/Library/Audio/Plug-Ins/Components/
-    cp -R build_mac/SpectraCross_artefacts/VST3/SpectraCross.vst3 ~/Library/Audio/Plug-Ins/VST3/
+    cp -R "$AU_SRC" ~/Library/Audio/Plug-Ins/Components/
+    cp -R "$VST3_SRC" ~/Library/Audio/Plug-Ins/VST3/
     
     echo "Installed to:"
     echo "  - ~/Library/Audio/Plug-Ins/Components/SpectraCross.component"

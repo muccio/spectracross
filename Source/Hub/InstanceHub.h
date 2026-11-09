@@ -60,7 +60,7 @@ private:
     void pruneStaleInstances(InstanceSnapshotMap& map, int64_t nowMs);
 
     std::mutex mutateMutex;
-    std::atomic<std::shared_ptr<const InstanceSnapshotMap>> currentSnapshot;
+    std::shared_ptr<const InstanceSnapshotMap> currentSnapshot;
 };
 
 } // namespace spectracross

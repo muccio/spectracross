@@ -76,7 +76,7 @@ void SpectrumProcessor::setFrozen(bool isFrozen) noexcept
 
 std::shared_ptr<const InstanceSpectralFrame> SpectrumProcessor::getLatestLocalFrame() const noexcept
 {
-    return publishedLocalFrame.load(std::memory_order_acquire);
+    return std::atomic_load_explicit(&publishedLocalFrame, std::memory_order_acquire);
 }
 
 void SpectrumProcessor::pushAudioBlock(const juce::AudioBuffer<float>& buffer, SummationMode mode) noexcept
@@ -475,7 +475,7 @@ void SpectrumProcessor::downsampleToLogBins()
 
     // Publish immutable snapshot via atomic pointer
     auto snapshot = std::make_shared<InstanceSpectralFrame>(workingFrame);
-    publishedLocalFrame.store(snapshot, std::memory_order_release);
+    std::atomic_store_explicit(&publishedLocalFrame, std::shared_ptr<const InstanceSpectralFrame>(snapshot), std::memory_order_release);
 }
 
 } // namespace spectracross
