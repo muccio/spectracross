@@ -1,0 +1,25 @@
+# Build outputs
+build/
+build_*/
+bin/
+*.o
+*.obj
+*.so
+*.dylib
+*.dll
+*.component
+*.vst3
+
+# JUCE framework submodule/cache (if cloned inside project)
+JUCE/
+
+# IDE files
+.vscode/
+.idea/
+*.xcodeproj
+*.sln
+*.vcxproj*
+
+# OS specific
+.DS_Store
+Thumbs.db

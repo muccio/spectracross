@@ -1,0 +1,145 @@
+name: Build SpectraCross (macOS & Windows)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # 1. macOS BUILD (Universal Binary: Apple Silicon M1/M2/M3/M4 arm64 + Intel x86_64)
+  #    Outputs: SpectraCross.component (AU) & SpectraCross.vst3
+  # ============================================================================
+  build-macos:
+    name: macOS Universal (AU & VST3)
+    runs-on: macos-14
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Cache JUCE Framework
+        uses: actions/cache@v4
+        id: juce-cache
+        with:
+          path: JUCE
+          key: juce-8.0.6-macos
+
+      - name: Clone JUCE 8 (if not cached)
+        if: steps.juce-cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 8.0.6 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure CMake (macOS Universal arm64 + x86_64)
+        run: |
+          cmake -B build -S . \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0" \
+            -G Xcode
+
+      - name: Build AU & VST3 Targets
+        run: |
+          cmake --build build --config Release --parallel
+
+      - name: Verify AudioUnit & Universal Architectures
+        run: |
+          echo "=== Inspecting Universal Binary Architectures ==="
+          lipo -info build/SpectraCross_artefacts/Release/AU/SpectraCross.component/Contents/MacOS/SpectraCross || true
+          lipo -info build/SpectraCross_artefacts/Release/VST3/SpectraCross.vst3/Contents/MacOS/SpectraCross || true
+
+      - name: Package macOS Artifacts
+        run: |
+          mkdir -p artifacts
+          cd build/SpectraCross_artefacts/Release
+          zip -r ../../../artifacts/SpectraCross-macOS-Universal.zip AU/SpectraCross.component VST3/SpectraCross.vst3
+
+      - name: Upload macOS Universal Binaries
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpectraCross-macOS-Universal
+          path: artifacts/SpectraCross-macOS-Universal.zip
+          retention-days: 14
+
+  # ============================================================================
+  # 2. WINDOWS BUILD (MSVC 2022 x64)
+  #    Outputs: SpectraCross.vst3
+  # ============================================================================
+  build-windows:
+    name: Windows x64 (VST3)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Cache JUCE Framework
+        uses: actions/cache@v4
+        id: juce-cache-win
+        with:
+          path: JUCE
+          key: juce-8.0.6-windows
+
+      - name: Clone JUCE 8 (if not cached)
+        if: steps.juce-cache-win.outputs.cache-hit != 'true'
+        run: |
+          git clone --depth 1 --branch 8.0.6 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure CMake (Visual Studio 2022 x64)
+        run: |
+          cmake -B build -S . -G "Visual Studio 17 2022" -A x64
+
+      - name: Build VST3 Target (Release)
+        run: |
+          cmake --build build --config Release --target SpectraCross_VST3 --parallel
+
+      - name: Package Windows Artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts
+          Compress-Archive -Path build\SpectraCross_artefacts\Release\VST3\SpectraCross.vst3 -DestinationPath artifacts\SpectraCross-Windows-x64.zip
+
+      - name: Upload Windows VST3 Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: SpectraCross-Windows-x64
+          path: artifacts/SpectraCross-Windows-x64.zip
+          retention-days: 14
+
+  # ============================================================================
+  # 3. LINUX BUILD & DSP VERIFICATION
+  # ============================================================================
+  build-linux:
+    name: Linux x64 (VST3 & Unit Tests)
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Linux Dev Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build libx11-dev libxcomposite-dev libxcursor-dev libxinerama-dev libxrandr-dev libxrender-dev libgl1-mesa-dev libfreetype6-dev
+
+      - name: Clone JUCE 8
+        run: |
+          git clone --depth 1 --branch 8.0.6 https://github.com/juce-framework/JUCE.git JUCE
+
+      - name: Configure & Build
+        run: |
+          cmake -B build -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
+          cmake --build build
+
+      - name: Run DSP Verification Tests
+        run: |
+          ./build/SpectraCross_Tests
