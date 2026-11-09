@@ -10,6 +10,13 @@ SpectraCrossAudioProcessor::SpectraCrossAudioProcessor()
                          .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
       apvts(*this, nullptr, "Parameters", createParameterLayout())
 {
+    spectrumProcessor.setInstanceId(instanceId);
+    spectrumProcessor.setTrackMetadata(
+        metadataFetcher.getEffectiveTrackName(),
+        metadataFetcher.getEffectiveTrackColour(),
+        metadataFetcher.getTrackIndex()
+    );
+
     // Register with in-process central hub
     InstanceHub::getInstance().registerInstance(
         instanceId,
@@ -73,6 +80,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout SpectraCrossAudioProcessor::
 void SpectraCrossAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     spectrumProcessor.prepare(sampleRate, samplesPerBlock);
+    spectrumProcessor.setInstanceId(instanceId);
+    spectrumProcessor.setTrackMetadata(
+        metadataFetcher.getEffectiveTrackName(),
+        metadataFetcher.getEffectiveTrackColour(),
+        metadataFetcher.getTrackIndex()
+    );
     metadataFetcher.probeHostContext(*this);
 
     InstanceHub::getInstance().updateInstanceMetadata(
@@ -159,6 +172,11 @@ void SpectraCrossAudioProcessor::syncParametersToDSP()
 void SpectraCrossAudioProcessor::updateTrackProperties(const TrackProperties& properties)
 {
     metadataFetcher.updateFromTrackProperties(properties);
+    spectrumProcessor.setTrackMetadata(
+        metadataFetcher.getEffectiveTrackName(),
+        metadataFetcher.getEffectiveTrackColour(),
+        metadataFetcher.getTrackIndex()
+    );
 
     InstanceHub::getInstance().updateInstanceMetadata(
         instanceId,
@@ -194,6 +212,12 @@ void SpectraCrossAudioProcessor::setStateInformation(const void* data, int sizeI
 
             apvts.replaceState(state);
             syncParametersToDSP();
+
+            spectrumProcessor.setTrackMetadata(
+                metadataFetcher.getEffectiveTrackName(),
+                metadataFetcher.getEffectiveTrackColour(),
+                metadataFetcher.getTrackIndex()
+            );
 
             InstanceHub::getInstance().updateInstanceMetadata(
                 instanceId,

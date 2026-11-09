@@ -2,6 +2,7 @@
 
 #include "../Common/SpectraCommon.h"
 #include "../Common/SpectralData.h"
+#include "../DSP/MaskingAnalyzer.h"
 #include "../Hub/InstanceHub.h"
 #include <juce_gui_basics/juce_gui_basics.h>
 #include <functional>
@@ -15,6 +16,8 @@ class InstanceRowComponent : public juce::Component
 public:
     InstanceRowComponent(const juce::Uuid& instanceId, bool isLocalInstance);
     ~InstanceRowComponent() override = default;
+
+    const juce::Uuid& getInstanceId() const noexcept { return id; }
 
     void updateData(const InstanceSpectralFrame& frame, float collisionPercent);
 
@@ -65,6 +68,7 @@ private:
     juce::Viewport viewport;
     juce::Component listContainer;
 
+    MaskingAnalyzer maskingAnalyzer;
     std::vector<std::unique_ptr<InstanceRowComponent>> rows;
 };
 

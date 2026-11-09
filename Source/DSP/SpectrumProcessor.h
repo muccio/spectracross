@@ -34,7 +34,18 @@ public:
     void setAttackDecay(float attackMs, float decayMs) noexcept;
     void setPeakHoldTime(HoldTime holdTime) noexcept;
     void setSmrThreshold(float thresholdDb) noexcept;
+    float getSmrThreshold() const noexcept { return smrThresholdDb.load(std::memory_order_relaxed); }
     void setFrozen(bool isFrozen) noexcept;
+
+    // Instance identification and metadata
+    void setInstanceId(const juce::Uuid& id) noexcept { instanceId = id; }
+    const juce::Uuid& getInstanceId() const noexcept { return instanceId; }
+    void setTrackMetadata(const juce::String& name, juce::Colour col, int idx)
+    {
+        trackName = name;
+        trackColour = col;
+        trackIndex = idx;
+    }
 
     // Snapshot retrieval for UI thread
     std::shared_ptr<const InstanceSpectralFrame> getLatestLocalFrame() const noexcept;
@@ -87,6 +98,12 @@ private:
 
     // Double-buffered local frame snapshot for UI thread
     std::shared_ptr<const InstanceSpectralFrame> publishedLocalFrame;
+
+    // Instance metadata
+    juce::Uuid instanceId;
+    juce::String trackName;
+    juce::Colour trackColour { 0xFF3A86FF };
+    int trackIndex = -1;
 
     // Working frame
     InstanceSpectralFrame workingFrame;

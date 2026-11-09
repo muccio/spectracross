@@ -169,22 +169,32 @@ void InstanceHub::publishSpectralFrame(const juce::Uuid& id, const InstanceSpect
     {
         if (!item) continue;
 
-        // Prune stale instances that have not published in > 5.0 seconds
-        if (item->instanceId != id && (nowMs - item->lastPublishTimeMs > 5000))
-        {
-            continue; // Stale instance pruned
-        }
-
         if (item->instanceId == id)
         {
             auto updated = std::make_shared<InstanceSpectralFrame>(frame);
             updated->instanceId = id;
             updated->lastPublishTimeMs = nowMs;
-            // Retain user display states
+            // Retain user display states and track metadata
             updated->isVisibleInDisplay = item->isVisibleInDisplay;
             updated->isSoloed = item->isSoloed;
             updated->isMuted = item->isMuted;
-            if (frame.trackName.isEmpty()) updated->trackName = item->trackName;
+            updated->isBypassed = item->isBypassed;
+
+            if (frame.trackName.isNotEmpty())
+                updated->trackName = frame.trackName;
+            else
+                updated->trackName = item->trackName;
+
+            if (frame.trackColour != juce::Colour())
+                updated->trackColour = frame.trackColour;
+            else
+                updated->trackColour = item->trackColour;
+
+            if (frame.trackIndex >= 0)
+                updated->trackIndex = frame.trackIndex;
+            else
+                updated->trackIndex = item->trackIndex;
+
             newMap->push_back(updated);
             found = true;
         }

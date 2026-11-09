@@ -190,8 +190,21 @@ void InstanceListOverlay::refreshInstances()
 
     const size_t numInstances = snapshot->size();
 
-    // Reallocate row components if count changed
-    if (rows.size() != numInstances)
+    // Reallocate row components if count or instance IDs changed
+    bool needsRebuild = (rows.size() != numInstances);
+    if (!needsRebuild)
+    {
+        for (size_t i = 0; i < numInstances; ++i)
+        {
+            if ((*snapshot)[i] && rows[i]->getInstanceId() != (*snapshot)[i]->instanceId)
+            {
+                needsRebuild = true;
+                break;
+            }
+        }
+    }
+
+    if (needsRebuild)
     {
         rows.clear();
         for (const auto& item : *snapshot)
@@ -224,7 +237,23 @@ void InstanceListOverlay::refreshInstances()
         const auto& item = (*snapshot)[i];
         if (!item) continue;
 
-        float collisionScore = item->collisionPercent;
+        float collisionScore = 0.0f;
+        if (item->instanceId != localId && localFrame)
+        {
+            std::array<float, kNumDisplayBins> dummyMask {};
+            maskingAnalyzer.computeInterTrackCollisions(
+                localFrame->barkEnergyDb,
+                item->barkExcitationDb,
+                currentSMRThreshold,
+                dummyMask,
+                collisionScore
+            );
+        }
+        else if (item->instanceId == localId)
+        {
+            collisionScore = item->collisionPercent;
+        }
+
         rows[i]->updateData(*item, collisionScore);
         rows[i]->setBounds(0, y, rowWidth, rowHeight);
         y += rowHeight;

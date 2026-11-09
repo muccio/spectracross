@@ -1,4 +1,5 @@
 #include "SpectrumProcessor.h"
+#include "../Hub/InstanceHub.h"
 #include <cmath>
 
 namespace spectracross
@@ -258,6 +259,8 @@ void SpectrumProcessor::rebuildFFTAndWindows(int newFFTSize, WindowType winType)
 
 void SpectrumProcessor::run()
 {
+    auto lastDecayTime = juce::Time::currentTimeMillis();
+
     while (!threadShouldExit())
     {
         // Check if FFT configuration has been modified
@@ -298,9 +301,29 @@ void SpectrumProcessor::run()
             }
         }
 
+        const auto now = juce::Time::currentTimeMillis();
+        const float deltaSec = static_cast<float>(now - lastDecayTime) / 1000.0f;
+
         if (hasProcessedFrame)
         {
+            lastDecayTime = now;
             downsampleToLogBins();
+        }
+        else if (deltaSec >= 0.05f) // ~20 Hz decay check when idle / paused
+        {
+            lastDecayTime = now;
+            bool needsDecay = false;
+            for (float s : smoothedMagnitudesDb)
+            {
+                if (s > -115.0f) { needsDecay = true; break; }
+            }
+
+            if (needsDecay && !freezeAnalyzer.load(std::memory_order_relaxed))
+            {
+                rawMagnitudesDb.assign(rawMagnitudesDb.size(), -120.0f);
+                applyBallistics(deltaSec);
+                downsampleToLogBins();
+            }
         }
 
         // Sleep briefly or wait for new incoming audio (target ~60-120 updates/sec)
@@ -471,11 +494,22 @@ void SpectrumProcessor::downsampleToLogBins()
         workingFrame.peakHoldDb[static_cast<size_t>(i)] = peakVal;
     }
 
+    workingFrame.instanceId = instanceId;
+    if (trackName.isNotEmpty()) workingFrame.trackName = trackName;
+    if (trackColour != juce::Colour()) workingFrame.trackColour = trackColour;
+    workingFrame.trackIndex = trackIndex;
     workingFrame.lastPublishTimeMs = juce::Time::currentTimeMillis();
 
-    // Publish immutable snapshot via atomic pointer
+    // Publish immutable snapshot via atomic pointer for local UI
     auto snapshot = std::make_shared<InstanceSpectralFrame>(workingFrame);
     std::atomic_store_explicit(&publishedLocalFrame, std::shared_ptr<const InstanceSpectralFrame>(snapshot), std::memory_order_release);
+
+    // Also publish directly to central InstanceHub so other instances can see this track in real time,
+    // even if this track's UI window is closed!
+    if (!instanceId.isNull())
+    {
+        InstanceHub::getInstance().publishSpectralFrame(instanceId, workingFrame);
+    }
 }
 
 } // namespace spectracross

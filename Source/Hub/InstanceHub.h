@@ -57,8 +57,6 @@ private:
     InstanceHub(const InstanceHub&) = delete;
     InstanceHub& operator=(const InstanceHub&) = delete;
 
-    void pruneStaleInstances(InstanceSnapshotMap& map, int64_t nowMs);
-
     std::mutex mutateMutex;
     std::shared_ptr<const InstanceSnapshotMap> currentSnapshot;
 };

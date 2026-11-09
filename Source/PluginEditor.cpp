@@ -44,6 +44,11 @@ void SpectraCrossAudioProcessorEditor::setupCallbacks()
 
     topBar.onTrackNameChanged = [this](const juce::String& newName) {
         processorRef.getMetadataFetcher().setCustomTrackName(newName);
+        processorRef.getSpectrumProcessor().setTrackMetadata(
+            newName,
+            processorRef.getMetadataFetcher().getEffectiveTrackColour(),
+            processorRef.getMetadataFetcher().getTrackIndex()
+        );
         InstanceHub::getInstance().updateInstanceMetadata(
             processorRef.getInstanceId(),
             processorRef.getMetadataFetcher().getEffectiveTrackName(),
@@ -57,6 +62,11 @@ void SpectraCrossAudioProcessorEditor::setupCallbacks()
         processorRef.getMetadataFetcher().setCustomTrackColour(col);
         topBar.setTrackColour(col);
         spectrumView.setLocalTrackColour(col);
+        processorRef.getSpectrumProcessor().setTrackMetadata(
+            processorRef.getMetadataFetcher().getEffectiveTrackName(),
+            col,
+            processorRef.getMetadataFetcher().getTrackIndex()
+        );
         InstanceHub::getInstance().updateInstanceMetadata(
             processorRef.getInstanceId(),
             processorRef.getMetadataFetcher().getEffectiveTrackName(),

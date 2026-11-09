@@ -54,16 +54,16 @@ void SpectrumComponent::timerCallback()
     if (pulsePhase > juce::MathConstants<float>::twoPi)
         pulsePhase -= juce::MathConstants<float>::twoPi;
 
-    // Fetch latest local frame and publish to InstanceHub
+    // Compute collision against all active remote instances for visualization
     auto localFrame = processor.getLatestLocalFrame();
     if (localFrame)
     {
-        // Compute collision against all active remote instances
         auto snapshot = InstanceHub::getInstance().getSnapshot();
         if (snapshot)
         {
             localCollisionIntensity.fill(0.0f);
             float totalMaxCollision = 0.0f;
+            const float threshold = processor.getSmrThreshold();
 
             for (const auto& remote : *snapshot)
             {
@@ -76,7 +76,7 @@ void SpectrumComponent::timerCallback()
                 processor.getMaskingAnalyzer().computeInterTrackCollisions(
                     localFrame->barkEnergyDb,
                     remote->barkExcitationDb,
-                    0.0f, // SMR threshold
+                    threshold,
                     remoteCollision512,
                     remoteCollisionPct
                 );
@@ -93,14 +93,6 @@ void SpectrumComponent::timerCallback()
             }
 
             maxCurrentCollision = totalMaxCollision;
-
-            // Update hub with latest frame
-            InstanceSpectralFrame published = *localFrame;
-            published.instanceId = localId;
-            published.trackColour = localColour;
-            published.collisionPercent = maxCurrentCollision;
-            published.collisionMaskDb = localCollisionIntensity;
-            InstanceHub::getInstance().publishSpectralFrame(localId, published);
         }
     }
 
