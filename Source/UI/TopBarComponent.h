@@ -19,6 +19,7 @@ public:
     // Callbacks
     std::function<void()> onColourSwatchClicked;
     std::function<void(const juce::String&)> onTrackNameChanged;
+    std::function<void(DisplayMode)> onDisplayModeChanged;
     std::function<void(SummationMode)> onSummationModeChanged;
     std::function<void(FFTSize)> onFFTSizeChanged;
     std::function<void(WindowType)> onWindowTypeChanged;
@@ -40,6 +41,7 @@ private:
     juce::TextButton colourSwatchButton;
     juce::TextEditor trackNameEditor;
 
+    juce::ComboBox displayModeCombo;
     juce::ComboBox modeCombo;
     juce::ComboBox fftSizeCombo;
     juce::ComboBox windowCombo;

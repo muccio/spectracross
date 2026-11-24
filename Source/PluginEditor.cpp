@@ -110,7 +110,11 @@ void SpectraCrossAudioProcessorEditor::setupCallbacks()
         showColorPickerModal(false);
     };
 
-    // Ribbon DSP controls
+    // Ribbon DSP & Visualization Mode controls
+    topBar.onDisplayModeChanged = [this](DisplayMode mode) {
+        spectrumView.setDisplayMode(mode);
+    };
+
     topBar.onSummationModeChanged = [this](SummationMode mode) {
         processorRef.setSummationMode(mode);
     };

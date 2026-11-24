@@ -21,6 +21,9 @@ public:
     void setDBRange(DBRange range);
     [[nodiscard]] DBRange getDBRange() const noexcept { return currentRange; }
 
+    void setDisplayMode(DisplayMode mode);
+    [[nodiscard]] DisplayMode getDisplayMode() const noexcept { return currentDisplayMode; }
+
     void setReferenceBandsVisible(bool visible);
     [[nodiscard]] bool areReferenceBandsVisible() const noexcept { return showReferenceBands; }
 
@@ -49,17 +52,36 @@ private:
     void drawGridAndScales(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb);
     void drawReferenceZones(juce::Graphics& g, const juce::Rectangle<float>& plotArea);
     void drawCurves(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb);
+    void drawSpectrogram2D(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb);
+    void drawWaterfall3D(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb);
     void drawCollisionVisualizer(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb);
     void drawCrosshairAndReadout(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb);
+
+    void pushHistorySlice(const std::array<float, kNumDisplayBins>& magsDb,
+                          const std::array<float, kNumDisplayBins>& collision);
+    void rebuildSpectrogramImage();
 
     SpectrumProcessor& processor;
     juce::Uuid localId;
     juce::Colour localColour { 0xFF3A86FF };
 
     DBRange currentRange = DBRange::Range72dB;
+    DisplayMode currentDisplayMode = DisplayMode::SpectrumRTA;
     bool showReferenceBands = true;
     bool showPianoRoll = true;
     bool showCollisionOverlay = true;
+
+    // Temporal history buffer for 2D Spectrogram & 3D Waterfall (~3 seconds at 60 FPS)
+    static constexpr int kHistoryDepth = 180;
+    struct HistorySlice
+    {
+        std::array<float, kNumDisplayBins> magnitudesDb {};
+        std::array<float, kNumDisplayBins> collision {};
+    };
+    std::array<HistorySlice, kHistoryDepth> historyRing {};
+    int historyHead = 0;
+    int historyCount = 0;
+    juce::Image spectrogramImage;
 
     // Mouse crosshair state
     bool isMouseOverPlot = false;

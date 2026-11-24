@@ -6,9 +6,19 @@ namespace spectracross
 {
 
 SpectrumComponent::SpectrumComponent(SpectrumProcessor& proc, const juce::Uuid& localInstanceId)
-    : processor(proc), localId(localInstanceId)
+    : processor(proc),
+      localId(localInstanceId),
+      spectrogramImage(juce::Image::ARGB, kNumDisplayBins, kHistoryDepth, true)
 {
     setOpaque(true);
+
+    for (auto& slice : historyRing)
+    {
+        slice.magnitudesDb.fill(-120.0f);
+        slice.collision.fill(0.0f);
+    }
+    spectrogramImage.clear(spectrogramImage.getBounds(), juce::Colour(0xFF0A0D14));
+
     startTimerHz(60); // 60 FPS ultra-smooth vector rendering
 }
 
@@ -20,7 +30,17 @@ SpectrumComponent::~SpectrumComponent()
 void SpectrumComponent::setDBRange(DBRange range)
 {
     currentRange = range;
+    rebuildSpectrogramImage();
     repaint();
+}
+
+void SpectrumComponent::setDisplayMode(DisplayMode mode)
+{
+    if (currentDisplayMode != mode)
+    {
+        currentDisplayMode = mode;
+        repaint();
+    }
 }
 
 void SpectrumComponent::setReferenceBandsVisible(bool visible)
@@ -109,12 +129,82 @@ void SpectrumComponent::timerCallback()
 
             maxCurrentCollision = totalMaxCollision;
 
+            pushHistorySlice(localFrame->magnitudesDb, localCollisionIntensity);
+
             if (onCollisionProfileUpdated)
                 onCollisionProfileUpdated(localCollisionIntensity);
         }
     }
 
     repaint();
+}
+
+void SpectrumComponent::pushHistorySlice(const std::array<float, kNumDisplayBins>& magsDb,
+                                         const std::array<float, kNumDisplayBins>& collision)
+{
+    historyRing[static_cast<size_t>(historyHead)].magnitudesDb = magsDb;
+    historyRing[static_cast<size_t>(historyHead)].collision = collision;
+    historyHead = (historyHead + 1) % kHistoryDepth;
+    if (historyCount < kHistoryDepth)
+        ++historyCount;
+
+    // Scroll 2D spectrogram image up by 1 row (newest frame at the bottom right above Piano Roll)
+    spectrogramImage.moveImageSection(0, 0, 0, 1, kNumDisplayBins, kHistoryDepth - 1);
+
+    const auto boundsRange = getDBRangeBounds(currentRange);
+    const float spanDb = std::max(1.0f, boundsRange.maxDb - boundsRange.minDb);
+    const int bottomY = kHistoryDepth - 1;
+
+    juce::Image::BitmapData bmp(spectrogramImage, juce::Image::BitmapData::writeOnly);
+    for (int x = 0; x < kNumDisplayBins; ++x)
+    {
+        const float db = magsDb[static_cast<size_t>(x)];
+        const float norm = juce::jlimit(0.0f, 1.0f, (db - boundsRange.minDb) / spanDb);
+        juce::Colour col = mapNormalizedDbToSpectrogramColour(norm);
+
+        // If collision overlay is enabled and there is severe clash at this frequency, add a subtle magenta-red rim
+        const float clash = collision[static_cast<size_t>(x)];
+        if (showCollisionOverlay && clash > 0.35f)
+        {
+            col = col.interpolatedWith(juce::Colour(0xFFFF1E56), (clash - 0.35f) * 0.45f);
+        }
+
+        bmp.setPixelColour(x, bottomY, col);
+    }
+}
+
+void SpectrumComponent::rebuildSpectrogramImage()
+{
+    if (!spectrogramImage.isValid())
+        return;
+
+    const auto boundsRange = getDBRangeBounds(currentRange);
+    const float spanDb = std::max(1.0f, boundsRange.maxDb - boundsRange.minDb);
+
+    spectrogramImage.clear(spectrogramImage.getBounds(), juce::Colour(0xFF0A0D14));
+    juce::Image::BitmapData bmp(spectrogramImage, juce::Image::BitmapData::writeOnly);
+
+    for (int age = 0; age < historyCount; ++age)
+    {
+        const int ringIdx = (historyHead - 1 - age + kHistoryDepth) % kHistoryDepth;
+        const int y = (kHistoryDepth - 1) - age;
+        const auto& slice = historyRing[static_cast<size_t>(ringIdx)];
+
+        for (int x = 0; x < kNumDisplayBins; ++x)
+        {
+            const float db = slice.magnitudesDb[static_cast<size_t>(x)];
+            const float norm = juce::jlimit(0.0f, 1.0f, (db - boundsRange.minDb) / spanDb);
+            juce::Colour col = mapNormalizedDbToSpectrogramColour(norm);
+
+            const float clash = slice.collision[static_cast<size_t>(x)];
+            if (showCollisionOverlay && clash > 0.35f)
+            {
+                col = col.interpolatedWith(juce::Colour(0xFFFF1E56), (clash - 0.35f) * 0.45f);
+            }
+
+            bmp.setPixelColour(x, y, col);
+        }
+    }
 }
 
 void SpectrumComponent::paint(juce::Graphics& g)
@@ -125,26 +215,32 @@ void SpectrumComponent::paint(juce::Graphics& g)
     // Dark sleek background
     g.fillAll(juce::Colour(0xFF0D1017));
 
-    // Plot area (reserve margin for dB scale and labels)
     auto plotArea = bounds;
 
-    // Layer 1: Problematic Frequency Band Reference Zones (if enabled)
-    if (showReferenceBands)
+    if (currentDisplayMode == DisplayMode::Spectrogram2D)
     {
-        drawReferenceZones(g, plotArea);
+        drawSpectrogram2D(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
     }
-
-    // Layer 2: Frequency & dB Grid Lines + Scale Labels
-    drawGridAndScales(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
-
-    // Layer 3: Inter-Track Masking Collision Overlay Shader
-    if (showCollisionOverlay)
+    else if (currentDisplayMode == DisplayMode::Waterfall3D)
     {
-        drawCollisionVisualizer(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
+        if (showReferenceBands)
+            drawReferenceZones(g, plotArea);
+        drawGridAndScales(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
+        drawWaterfall3D(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
     }
+    else
+    {
+        // Default: Instantaneous Real-Time Frequency Spectrum (RTA)
+        if (showReferenceBands)
+            drawReferenceZones(g, plotArea);
 
-    // Layer 4: Multi-Track Curves & Local Track Path
-    drawCurves(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
+        drawGridAndScales(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
+
+        if (showCollisionOverlay)
+            drawCollisionVisualizer(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
+
+        drawCurves(g, plotArea, boundsRange.minDb, boundsRange.maxDb);
+    }
 
     // Layer 5: Interactive Crosshair & Information Badge
     if (isMouseOverPlot)
@@ -439,9 +535,240 @@ void SpectrumComponent::drawCurves(juce::Graphics& g, const juce::Rectangle<floa
     g.strokePath(localPeakPath, juce::PathStrokeType(1.0f));
 }
 
+void SpectrumComponent::drawSpectrogram2D(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb)
+{
+    const float w = plotArea.getWidth();
+    const float h = plotArea.getHeight();
+
+    // 1. Render 2D Temporal Spectrogram Heatmap Image (512 log-freq bins x 180 time slices)
+    if (spectrogramImage.isValid())
+    {
+        g.setImageResamplingQuality(juce::Graphics::mediumResamplingQuality);
+        g.drawImage(spectrogramImage, plotArea);
+    }
+
+    // 2. Overlay Reference Zone Brackets at the top (if enabled)
+    if (showReferenceBands)
+    {
+        const auto& zones = getProblemBands();
+        for (const auto& zone : zones)
+        {
+            const float x1 = freqToLogX(zone.lowFreq, w);
+            const float x2 = freqToLogX(zone.highFreq, w);
+            const float zoneWidth = std::max(2.0f, x2 - x1);
+
+            juce::Colour baseCol(zone.colorArgb);
+            g.setColour(baseCol.withAlpha(0.35f));
+            g.drawVerticalLine(static_cast<int>(x1), 0.0f, 16.0f);
+            g.drawVerticalLine(static_cast<int>(x2), 0.0f, 16.0f);
+            g.drawHorizontalLine(2, x1, x2);
+
+            g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
+            g.setColour(baseCol.brighter(0.2f).withAlpha(0.85f));
+            g.drawText(juce::String(zone.name).toUpperCase(),
+                       juce::Rectangle<float>(x1 + 2.0f, 3.0f, zoneWidth - 4.0f, 14.0f),
+                       juce::Justification::centred, true);
+        }
+    }
+
+    // 3. Vertical Logarithmic Frequency Grid Lines & Bottom Labels
+    struct PrimaryFreq { float freq; const char* label; };
+    static const PrimaryFreq primaryFreqs[] = {
+        { 20.0f, "20" }, { 50.0f, "50" }, { 100.0f, "100" }, { 200.0f, "200" }, { 500.0f, "500" },
+        { 1000.0f, "1k" }, { 2000.0f, "2k" }, { 5000.0f, "5k" }, { 10000.0f, "10k" }, { 20000.0f, "20k" }
+    };
+
+    for (const auto& pf : primaryFreqs)
+    {
+        const float x = freqToLogX(pf.freq, w);
+        g.setColour(juce::Colour(0x30FFFFFF));
+        g.drawVerticalLine(static_cast<int>(x), 0.0f, h);
+
+        g.setColour(juce::Colour(0xB0FFFFFF));
+        g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
+        g.drawText(pf.label, juce::Rectangle<float>(x - 18.0f, h - 18.0f, 36.0f, 16.0f), juce::Justification::centred);
+    }
+
+    // 4. Horizontal Temporal Grid Lines (0.0s at bottom -> -3.0s at top)
+    static const float timeMarksSec[] = { 0.0f, -0.5f, -1.0f, -1.5f, -2.0f, -2.5f };
+    constexpr float maxHistorySec = 3.0f;
+
+    for (float tSec : timeMarksSec)
+    {
+        const float normAge = std::abs(tSec) / maxHistorySec;
+        const float y = h * (1.0f - normAge);
+
+        g.setColour(juce::Colour(0x22FFFFFF));
+        g.drawHorizontalLine(static_cast<int>(y), 0.0f, w);
+
+        g.setColour(juce::Colour(0x90FFFFFF));
+        g.setFont(juce::FontOptions(9.0f));
+        const juce::String timeLabel = (tSec == 0.0f) ? "NOW (0.0s)" : (juce::String(tSec, 1) + " s");
+        g.drawText(timeLabel, juce::Rectangle<float>(w - 66.0f, y - 15.0f, 60.0f, 14.0f), juce::Justification::centredRight);
+    }
+
+    // 5. Thermal Color Intensity Scale Legend Bar (Top-Left overlay pill)
+    const auto legendRect = juce::Rectangle<float>(10.0f, 22.0f, 176.0f, 34.0f);
+    g.setColour(juce::Colour(0xD810141E));
+    g.fillRoundedRectangle(legendRect, 5.0f);
+    g.setColour(juce::Colour(0xFF2B3348));
+    g.drawRoundedRectangle(legendRect, 5.0f, 1.0f);
+
+    g.setColour(juce::Colours::white.withAlpha(0.9f));
+    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
+    g.drawText("SPECTROGRAM 2D INTENSITY",
+               juce::Rectangle<float>(legendRect.getX() + 8.0f, legendRect.getY() + 3.0f, legendRect.getWidth() - 16.0f, 12.0f),
+               juce::Justification::centredLeft);
+
+    const float barX = legendRect.getX() + 38.0f;
+    const float barY = legendRect.getY() + 18.0f;
+    const float barW = 100.0f;
+    const float barH = 9.0f;
+
+    for (int i = 0; i < static_cast<int>(barW); ++i)
+    {
+        const float norm = static_cast<float>(i) / (barW - 1.0f);
+        g.setColour(mapNormalizedDbToSpectrogramColour(norm));
+        g.fillRect(barX + static_cast<float>(i), barY, 1.5f, barH);
+    }
+    g.setColour(juce::Colour(0x60FFFFFF));
+    g.drawRect(barX, barY, barW, barH, 0.8f);
+
+    g.setColour(juce::Colour(0xFFAAB4C8));
+    g.setFont(juce::FontOptions(8.5f));
+    g.drawText(juce::String(static_cast<int>(minDb)),
+               juce::Rectangle<float>(legendRect.getX() + 6.0f, barY - 2.0f, 28.0f, 13.0f),
+               juce::Justification::centredRight);
+    g.drawText("+" + juce::String(static_cast<int>(maxDb)) + "dB",
+               juce::Rectangle<float>(barX + barW + 3.0f, barY - 2.0f, 34.0f, 13.0f),
+               juce::Justification::centredLeft);
+}
+
+void SpectrumComponent::drawWaterfall3D(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb)
+{
+    const float w = plotArea.getWidth();
+    const float h = plotArea.getHeight();
+    const float spanDb = std::max(1.0f, maxDb - minDb);
+
+    constexpr int kNumWaterfallSlices = 36;
+    constexpr int kSliceStride = 4; // Sample every 4th history frame (~2.4s total 3D depth)
+    constexpr int kPointsPerSlice = 171; // Every 3rd bin for crisp 60 FPS 3D vector ridges
+
+    const float maxDepthOffsetY = h * 0.44f;
+    const float frontPlotHeight = h * 0.56f;
+
+    // Render from oldest (back/top) to newest (front/bottom) using Painter's Occlusion Algorithm
+    for (int s = kNumWaterfallSlices - 1; s >= 0; --s)
+    {
+        const int historyAge = s * kSliceStride;
+        if (historyAge >= historyCount)
+            continue;
+
+        const int ringIdx = (historyHead - 1 - historyAge + kHistoryDepth) % kHistoryDepth;
+        const auto& slice = historyRing[static_cast<size_t>(ringIdx)];
+
+        const float depth = static_cast<float>(s) / static_cast<float>(kNumWaterfallSlices - 1); // 0 = front, 1 = back
+        const float baselineY = h - depth * maxDepthOffsetY;
+        const float sliceScaleH = frontPlotHeight * (1.0f - depth * 0.28f);
+
+        juce::Path ridgePath;
+        juce::Path occlusionFill;
+        bool started = false;
+        float peakNormInSlice = 0.0f;
+        float maxClashInSlice = 0.0f;
+
+        for (int p = 0; p < kPointsPerSlice; ++p)
+        {
+            const int binIdx = std::min(kNumDisplayBins - 1, p * 3);
+            const float db = slice.magnitudesDb[static_cast<size_t>(binIdx)];
+            const float normDb = juce::jlimit(0.0f, 1.0f, (db - minDb) / spanDb);
+            peakNormInSlice = std::max(peakNormInSlice, normDb);
+            maxClashInSlice = std::max(maxClashInSlice, slice.collision[static_cast<size_t>(binIdx)]);
+
+            const float normX = static_cast<float>(binIdx) / static_cast<float>(kNumDisplayBins - 1);
+            const float x = normX * w;
+            const float y = baselineY - normDb * sliceScaleH;
+
+            if (!started)
+            {
+                ridgePath.startNewSubPath(x, y);
+                started = true;
+            }
+            else
+            {
+                ridgePath.lineTo(x, y);
+            }
+        }
+
+        // Occlude older slices behind this ridge
+        occlusionFill = ridgePath;
+        occlusionFill.lineTo(w, baselineY + 2.0f);
+        occlusionFill.lineTo(0.0f, baselineY + 2.0f);
+        occlusionFill.closeSubPath();
+
+        const float distanceFade = 1.0f - depth * 0.75f;
+        const juce::Colour ridgeThermalCol = mapNormalizedDbToSpectrogramColour(peakNormInSlice);
+        juce::Colour sliceStrokeCol = localColour.interpolatedWith(ridgeThermalCol, 0.55f).withAlpha(distanceFade);
+
+        if (showCollisionOverlay && maxClashInSlice > 0.30f)
+        {
+            sliceStrokeCol = sliceStrokeCol.interpolatedWith(juce::Colour(0xFFFF2A4B), maxClashInSlice * 0.5f);
+        }
+
+        juce::ColourGradient sliceFillGrad(
+            sliceStrokeCol.withAlpha(0.22f * distanceFade),
+            0.0f, baselineY - sliceScaleH,
+            juce::Colour(0xF20D1017),
+            0.0f, baselineY,
+            false
+        );
+        g.setGradientFill(sliceFillGrad);
+        g.fillPath(occlusionFill);
+
+        const float strokeWidth = (s == 0) ? 2.2f : (1.5f - depth * 0.7f);
+        g.setColour(sliceStrokeCol);
+        g.strokePath(ridgePath, juce::PathStrokeType(strokeWidth, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+    }
+
+    // Draw visible remote tracks on the front-most plane (depth = 0) for instant multi-track comparison
+    auto snapshot = InstanceHub::getInstance().getSnapshot();
+    if (snapshot)
+    {
+        for (const auto& inst : *snapshot)
+        {
+            if (!inst || inst->instanceId == localId || inst->isBypassed || !inst->isVisibleInDisplay)
+                continue;
+
+            juce::Path remotePath;
+            bool started = false;
+
+            for (int i = 0; i < kNumDisplayBins; ++i)
+            {
+                const float db = inst->magnitudesDb[static_cast<size_t>(i)];
+                const float normDb = juce::jlimit(0.0f, 1.0f, (db - minDb) / spanDb);
+                const float normX = static_cast<float>(i) / static_cast<float>(kNumDisplayBins - 1);
+                const float x = normX * w;
+                const float y = h - normDb * frontPlotHeight;
+
+                if (!started)
+                {
+                    remotePath.startNewSubPath(x, y);
+                    started = true;
+                }
+                else
+                {
+                    remotePath.lineTo(x, y);
+                }
+            }
+
+            g.setColour(inst->trackColour.withAlpha(0.80f));
+            g.strokePath(remotePath, juce::PathStrokeType(1.6f, juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+        }
+    }
+}
+
 void SpectrumComponent::drawCrosshairAndReadout(juce::Graphics& g, const juce::Rectangle<float>& plotArea, float minDb, float maxDb)
 {
-    juce::ignoreUnused(minDb, maxDb);
     const float w = plotArea.getWidth();
     const float h = plotArea.getHeight();
 
@@ -458,12 +785,33 @@ void SpectrumComponent::drawCrosshairAndReadout(juce::Graphics& g, const juce::R
         freqStr = juce::String(hoveredFreq, 1) + " Hz";
 
     juce::String centsStr = (hoveredCents >= 0 ? "+" : "") + juce::String(hoveredCents) + " ct";
-    juce::String dbStr = (hoveredDb >= 0.0f ? "+" : "") + juce::String(hoveredDb, 1) + " dB";
+    juce::String dbStr;
+
+    if (currentDisplayMode == DisplayMode::Spectrogram2D && historyCount > 0)
+    {
+        const float normY = juce::jlimit(0.0f, 1.0f, mousePos.y / std::max(1.0f, h));
+        const int age = juce::jlimit(0, kHistoryDepth - 1, static_cast<int>((1.0f - normY) * (kHistoryDepth - 1)));
+        const int binIdx = juce::jlimit(0, kNumDisplayBins - 1,
+                                        static_cast<int>((mousePos.x / std::max(1.0f, w)) * (kNumDisplayBins - 1)));
+        float sampleDb = minDb;
+        if (age < historyCount)
+        {
+            const int ringIdx = (historyHead - 1 - age + kHistoryDepth) % kHistoryDepth;
+            sampleDb = historyRing[static_cast<size_t>(ringIdx)].magnitudesDb[static_cast<size_t>(binIdx)];
+        }
+        const float timeOffsetSec = -(static_cast<float>(age) / 60.0f);
+        dbStr = juce::String(sampleDb, 1) + " dB @ " + juce::String(timeOffsetSec, 2) + "s";
+    }
+    else
+    {
+        juce::ignoreUnused(minDb, maxDb);
+        dbStr = (hoveredDb >= 0.0f ? "+" : "") + juce::String(hoveredDb, 1) + " dB";
+    }
 
     juce::String fullInfo = freqStr + "   " + hoveredNoteName + " (" + centsStr + ")   " + dbStr;
 
     // Draw floating pill badge
-    const float badgeW = 210.0f;
+    const float badgeW = (currentDisplayMode == DisplayMode::Spectrogram2D) ? 245.0f : 210.0f;
     const float badgeH = 26.0f;
     float badgeX = mousePos.x + 12.0f;
     float badgeY = mousePos.y - 32.0f;

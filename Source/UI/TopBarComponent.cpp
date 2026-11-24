@@ -38,6 +38,22 @@ TopBarComponent::TopBarComponent()
         addAndMakeVisible(cb);
     };
 
+    // Display Mode Switch (Spectrum RTA / Spectrogram 2D / Waterfall 3D)
+    setupCombo(displayModeCombo, { "View: Spectrum", "View: Spectrogram 2D", "View: Waterfall 3D" }, 1);
+    displayModeCombo.setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xFF1D283A));
+    displayModeCombo.setColour(juce::ComboBox::outlineColourId, juce::Colour(0xFF3A86FF));
+    displayModeCombo.onChange = [this]() {
+        if (onDisplayModeChanged)
+        {
+            switch (displayModeCombo.getSelectedId())
+            {
+                case 1: onDisplayModeChanged(DisplayMode::SpectrumRTA); break;
+                case 2: onDisplayModeChanged(DisplayMode::Spectrogram2D); break;
+                case 3: onDisplayModeChanged(DisplayMode::Waterfall3D); break;
+            }
+        }
+    };
+
     // Summation Mode
     setupCombo(modeCombo, { "Stereo", "Mono", "Mid", "Side", "Max-Peak" }, 1);
     modeCombo.onChange = [this]() {
@@ -192,49 +208,51 @@ void TopBarComponent::paint(juce::Graphics& g)
 
 void TopBarComponent::resized()
 {
-    const int pad = 8;
+    const int pad = 6;
     const int h = 26;
     const int y = (getHeight() - h) / 2;
 
     int x = pad;
 
     colourSwatchButton.setBounds(x, y + 2, 22, 22);
-    x += 28;
+    x += 26;
 
-    trackNameEditor.setBounds(x, y, 140, h);
-    x += 148;
+    trackNameEditor.setBounds(x, y, 108, h);
+    x += 113;
 
-    modeCombo.setBounds(x, y, 92, h);
-    x += 98;
+    displayModeCombo.setBounds(x, y, 134, h);
+    x += 139;
 
-    fftSizeCombo.setBounds(x, y, 92, h);
-    x += 98;
+    modeCombo.setBounds(x, y, 78, h);
+    x += 83;
 
-    windowCombo.setBounds(x, y, 138, h);
-    x += 144;
+    fftSizeCombo.setBounds(x, y, 80, h);
+    x += 85;
 
-    tiltCombo.setBounds(x, y, 115, h);
-    x += 121;
+    windowCombo.setBounds(x, y, 118, h);
+    x += 123;
 
-    rangeCombo.setBounds(x, y, 105, h);
-    x += 111;
+    tiltCombo.setBounds(x, y, 98, h);
+    x += 103;
 
-    holdCombo.setBounds(x, y, 98, h);
-    x += 104;
+    rangeCombo.setBounds(x, y, 92, h);
+    x += 97;
 
-    refBandsToggle.setBounds(x, y, 84, h);
-    x += 88;
+    holdCombo.setBounds(x, y, 86, h);
+    x += 90;
 
-    pianoToggle.setBounds(x, y, 62, h);
-    x += 66;
+    refBandsToggle.setBounds(x, y, 78, h);
+    x += 80;
+
+    pianoToggle.setBounds(x, y, 56, h);
 
     // Right-aligned controls
     int rightX = getWidth() - pad;
 
-    instanceListButton.setBounds(rightX - 105, y, 105, h);
-    rightX -= 112;
+    instanceListButton.setBounds(rightX - 98, y, 98, h);
+    rightX -= 103;
 
-    freezeButton.setBounds(rightX - 65, y, 65, h);
+    freezeButton.setBounds(rightX - 58, y, 58, h);
 }
 
 } // namespace spectracross

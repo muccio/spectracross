@@ -148,6 +148,17 @@ void testInstanceHub()
     assert(frame2 != nullptr);
     assert(frame2->trackName == "Bass Synth");
 
+    // Test changing instance colour via hub and retaining it across spectral frame publishing
+    const juce::Colour customCol(0xFF00F5D4);
+    hub.setInstanceColour(id2, customCol);
+    assert(hub.getInstanceFrame(id2)->trackColour == customCol);
+
+    InstanceSpectralFrame pubFrame;
+    pubFrame.instanceId = id2;
+    pubFrame.trackColour = juce::Colour(0xFF112233); // Older DSP thread colour should not overwrite hub colour
+    hub.publishSpectralFrame(id2, pubFrame);
+    assert(hub.getInstanceFrame(id2)->trackColour == customCol);
+
     hub.unregisterInstance(id1);
     auto snapAfter = hub.getSnapshot();
     assert(hub.getInstanceFrame(id1) == nullptr);
@@ -191,6 +202,27 @@ void testMIDIAndMath()
     std::cout << "  -> MIDI conversion & coordinate mapping passed!" << std::endl;
 }
 
+void testSpectrogramAndDisplayModes()
+{
+    std::cout << "[TEST] Running Spectrogram 2D & Waterfall 3D thermal colormap test..." << std::endl;
+
+    assert(static_cast<int>(DisplayMode::SpectrumRTA) == 0);
+    assert(static_cast<int>(DisplayMode::Spectrogram2D) == 1);
+    assert(static_cast<int>(DisplayMode::Waterfall3D) == 2);
+
+    const juce::Colour silenceCol = mapNormalizedDbToSpectrogramColour(0.0f);
+    const juce::Colour midCol = mapNormalizedDbToSpectrogramColour(0.5f);
+    const juce::Colour peakCol = mapNormalizedDbToSpectrogramColour(1.0f);
+
+    // Silence should be dark, mid should be bright chromatic, peak should be incandescent white
+    assert(silenceCol.getBrightness() < 0.15f);
+    assert(midCol.getBrightness() > 0.50f);
+    assert(peakCol.getBrightness() > 0.95f);
+    assert(peakCol.getRed() == 255 && peakCol.getGreen() == 255 && peakCol.getBlue() == 255);
+
+    std::cout << "  -> Spectrogram 2D & Waterfall 3D thermal colormap passed!" << std::endl;
+}
+
 int main()
 {
     std::cout << "========================================" << std::endl;
@@ -202,6 +234,7 @@ int main()
     testMaskingAnalyzer();
     testInstanceHub();
     testMIDIAndMath();
+    testSpectrogramAndDisplayModes();
 
     std::cout << "========================================" << std::endl;
     std::cout << " ALL SPECTACROSS ENGINE TESTS PASSED!   " << std::endl;

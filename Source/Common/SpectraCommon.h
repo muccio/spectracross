@@ -63,6 +63,36 @@ enum class HoldTime : int
     Infinite
 };
 
+enum class DisplayMode : int
+{
+    SpectrumRTA = 0,   // Instantaneous real-time frequency spectrum
+    Spectrogram2D,     // 2D temporal spectrogram (time vs log-frequency with color intensity)
+    Waterfall3D        // 3D temporal cascading waterfall plot
+};
+
+/** Maps a normalized dB level [0.0 .. 1.0] to a high-contrast spectrogram thermal colour. */
+inline juce::Colour mapNormalizedDbToSpectrogramColour(float normLevel) noexcept
+{
+    const float t = juce::jlimit(0.0f, 1.0f, normLevel);
+    const juce::Colour c0(0xFF0A0D14); // Silence floor (dark obsidian)
+    const juce::Colour c1(0xFF142459); // Low energy (deep navy/indigo)
+    const juce::Colour c2(0xFF0096C7); // Low-mid energy (electric cyan-blue)
+    const juce::Colour c3(0xFF06D6A0); // Mid energy (emerald green)
+    const juce::Colour c4(0xFFFFD166); // High-mid energy (warm amber/yellow)
+    const juce::Colour c5(0xFFFF5400); // High energy (fiery orange)
+    const juce::Colour c6(0xFFFF1E42); // Very high energy (crimson red)
+    const juce::Colour c7(0xFFFFFFFF); // Peak 0 dBFS (incandescent white)
+
+    if (t <= 0.02f) return c0;
+    if (t < 0.16f)  return c0.interpolatedWith(c1, (t - 0.02f) / 0.14f);
+    if (t < 0.32f)  return c1.interpolatedWith(c2, (t - 0.16f) / 0.16f);
+    if (t < 0.48f)  return c2.interpolatedWith(c3, (t - 0.32f) / 0.16f);
+    if (t < 0.64f)  return c3.interpolatedWith(c4, (t - 0.48f) / 0.16f);
+    if (t < 0.80f)  return c4.interpolatedWith(c5, (t - 0.64f) / 0.16f);
+    if (t < 0.93f)  return c5.interpolatedWith(c6, (t - 0.80f) / 0.13f);
+    return c6.interpolatedWith(c7, (t - 0.93f) / 0.07f);
+}
+
 struct DBRangeBounds
 {
     float minDb;
