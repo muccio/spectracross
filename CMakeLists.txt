@@ -5,6 +5,10 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+if(MSVC)
+    set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+endif()
+
 # macOS specific deployment settings
 if(APPLE)
     if(NOT CMAKE_OSX_DEPLOYMENT_TARGET)
@@ -119,8 +123,11 @@ elseif(MSVC)
         /O2
         /arch:AVX2
     )
-    # Statically link runtime on Windows to avoid missing MSVCP DLL dependencies
+    # Statically link runtime on Windows across both SharedCode and VST3 targets
     set_property(TARGET SpectraCross PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    if(TARGET SpectraCross_VST3)
+        set_property(TARGET SpectraCross_VST3 PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    endif()
 endif()
 
 # Test runner executable
