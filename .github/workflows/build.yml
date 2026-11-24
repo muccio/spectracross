@@ -18,7 +18,7 @@ jobs:
   # ============================================================================
   build-macos:
     name: macOS Universal (AU & VST3)
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -42,8 +42,7 @@ jobs:
           cmake -B build -S . \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64" \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0" \
-            -G Xcode
+            -DCMAKE_OSX_DEPLOYMENT_TARGET="11.0"
 
       - name: Build AU & VST3 Targets
         run: |
@@ -52,14 +51,23 @@ jobs:
       - name: Verify AudioUnit & Universal Architectures
         run: |
           echo "=== Inspecting Universal Binary Architectures ==="
-          lipo -info build/SpectraCross_artefacts/Release/AU/SpectraCross.component/Contents/MacOS/SpectraCross || true
-          lipo -info build/SpectraCross_artefacts/Release/VST3/SpectraCross.vst3/Contents/MacOS/SpectraCross || true
+          AU_BIN="build/SpectraCross_artefacts/Release/AU/SpectraCross.component/Contents/MacOS/SpectraCross"
+          [ ! -f "$AU_BIN" ] && AU_BIN="build/SpectraCross_artefacts/AU/SpectraCross.component/Contents/MacOS/SpectraCross"
+          VST3_BIN="build/SpectraCross_artefacts/Release/VST3/SpectraCross.vst3/Contents/MacOS/SpectraCross"
+          [ ! -f "$VST3_BIN" ] && VST3_BIN="build/SpectraCross_artefacts/VST3/SpectraCross.vst3/Contents/MacOS/SpectraCross"
+          lipo -info "$AU_BIN" || true
+          lipo -info "$VST3_BIN" || true
 
       - name: Package macOS Artifacts
         run: |
           mkdir -p artifacts
-          cd build/SpectraCross_artefacts/Release
-          zip -r ../../../artifacts/SpectraCross-macOS-Universal.zip AU/SpectraCross.component VST3/SpectraCross.vst3
+          if [ -d "build/SpectraCross_artefacts/Release" ]; then
+            cd build/SpectraCross_artefacts/Release
+            zip -r ../../../artifacts/SpectraCross-macOS-Universal.zip AU/SpectraCross.component VST3/SpectraCross.vst3
+          else
+            cd build/SpectraCross_artefacts
+            zip -r ../../artifacts/SpectraCross-macOS-Universal.zip AU/SpectraCross.component VST3/SpectraCross.vst3
+          fi
 
       - name: Upload macOS Universal Binaries
         uses: actions/upload-artifact@v4
@@ -93,9 +101,9 @@ jobs:
         run: |
           git clone --depth 1 --branch 8.0.6 https://github.com/juce-framework/JUCE.git JUCE
 
-      - name: Configure CMake (Visual Studio 2022 x64)
+      - name: Configure CMake (Visual Studio x64)
         run: |
-          cmake -B build -S . -G "Visual Studio 17 2022" -A x64
+          cmake -B build -S . -A x64
 
       - name: Build VST3 Target (Release)
         run: |

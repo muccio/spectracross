@@ -16,6 +16,12 @@ public:
     void setCurrentColour(juce::Colour colour);
     [[nodiscard]] juce::Colour getCurrentColour() const noexcept { return selectedColour; }
 
+    void setTargetTitle(const juce::String& title)
+    {
+        headerTitle = title.isNotEmpty() ? ("Color: " + title) : "Track Color Palette";
+        repaint();
+    }
+
     std::function<void(juce::Colour)> onColourChanged;
     std::function<void()> onCloseRequested;
 
@@ -25,6 +31,7 @@ public:
 
 private:
     juce::Colour selectedColour { 0xFF3A86FF };
+    juce::String headerTitle { "Track Color Palette" };
 
     juce::Slider rSlider;
     juce::Slider gSlider;

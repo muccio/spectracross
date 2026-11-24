@@ -26,8 +26,13 @@ private:
 
     void setupCallbacks();
     void showColorPickerModal(bool show);
+    void openColorPickerForInstance(const juce::Uuid& targetId,
+                                    const juce::String& targetName,
+                                    juce::Colour currentCol,
+                                    bool fromSidebar);
 
     SpectraCrossAudioProcessor& processorRef;
+    juce::Uuid colorPickerTargetId;
 
     TopBarComponent topBar;
     SpectrumComponent spectrumView;

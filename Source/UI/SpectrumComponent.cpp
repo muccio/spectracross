@@ -83,9 +83,24 @@ void SpectrumComponent::timerCallback()
 
                 for (int i = 0; i < kNumDisplayBins; ++i)
                 {
-                    localCollisionIntensity[static_cast<size_t>(i)] = std::max(
-                        localCollisionIntensity[static_cast<size_t>(i)],
-                        remoteCollision512[static_cast<size_t>(i)]
+                    const size_t idx = static_cast<size_t>(i);
+                    float binSeverity = remoteCollision512[idx];
+
+                    // Combine Bark masking with fine 512-bin spectral energy overlap
+                    const float localDb = localFrame->magnitudesDb[idx];
+                    const float remoteDb = remote->magnitudesDb[idx];
+                    if (localDb > -68.0f && remoteDb > -68.0f)
+                    {
+                        const float jointLevel = std::min(localDb, remoteDb);
+                        const float prominence = juce::jlimit(0.0f, 1.0f, (jointLevel - (-68.0f)) / 44.0f);
+                        const float maskRatio = juce::jlimit(0.0f, 1.25f, (remoteDb - localDb + 12.0f - threshold) / 22.0f);
+                        const float fineOverlap = juce::jlimit(0.0f, 1.0f, prominence * maskRatio);
+                        binSeverity = std::max(binSeverity, fineOverlap * 0.9f + binSeverity * 0.1f);
+                    }
+
+                    localCollisionIntensity[idx] = std::max(
+                        localCollisionIntensity[idx],
+                        binSeverity
                     );
                 }
 
@@ -93,6 +108,9 @@ void SpectrumComponent::timerCallback()
             }
 
             maxCurrentCollision = totalMaxCollision;
+
+            if (onCollisionProfileUpdated)
+                onCollisionProfileUpdated(localCollisionIntensity);
         }
     }
 

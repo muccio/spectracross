@@ -23,9 +23,9 @@ if (-not (Test-Path "JUCE") -and -not (Test-Path "..\JUCE")) {
     git clone --depth 1 --branch 8.0.6 https://github.com/juce-framework/JUCE.git JUCE
 }
 
-# 3. Configure CMake with Visual Studio 2022
-Write-Host "Configuring CMake for Visual Studio 2022 x64..." -ForegroundColor Green
-cmake -B build_win -S . -G "Visual Studio 17 2022" -A x64
+# 3. Configure CMake with Visual Studio x64
+Write-Host "Configuring CMake for Visual Studio x64..." -ForegroundColor Green
+cmake -B build_win -S . -A x64
 
 # 4. Build VST3 Target
 Write-Host "Compiling SpectraCross VST3 (Release)..." -ForegroundColor Green

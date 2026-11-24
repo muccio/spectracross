@@ -23,14 +23,24 @@ public:
 
     void paint(juce::Graphics& g) override;
     void resized() override;
+    void mouseMove(const juce::MouseEvent& e) override;
+    void mouseExit(const juce::MouseEvent& e) override;
+    void mouseDown(const juce::MouseEvent& e) override;
 
     std::function<void(const juce::Uuid&, bool)> onVisibilityToggled;
     std::function<void(const juce::Uuid&, bool)> onSoloToggled;
     std::function<void(const juce::Uuid&, bool)> onMuteToggled;
+    std::function<void(const juce::Uuid&, const juce::String&, juce::Colour)> onColourSwatchClicked;
 
 private:
+    juce::Rectangle<float> getSwatchBounds() const noexcept
+    {
+        return { 27.0f, 8.0f, 16.0f, 16.0f };
+    }
+
     juce::Uuid id;
     bool isLocal = false;
+    bool isHoveringSwatch = false;
     juce::Colour trackColour { 0xFF3A86FF };
     juce::String trackName;
     float currentCollisionPercent = 0.0f;
@@ -50,6 +60,7 @@ public:
     float getSMRThreshold() const noexcept { return currentSMRThreshold; }
 
     std::function<void(float)> onSMRThresholdChanged;
+    std::function<void(const juce::Uuid&, const juce::String&, juce::Colour)> onInstanceColourSwatchClicked;
 
     void paint(juce::Graphics& g) override;
     void resized() override;

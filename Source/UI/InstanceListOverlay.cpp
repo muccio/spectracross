@@ -55,39 +55,112 @@ void InstanceRowComponent::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xFF252A3A));
     g.drawHorizontalLine(getHeight() - 1, 0.0f, bounds.getWidth());
 
-    // Color Swatch Pill
-    auto swatchArea = juce::Rectangle<float>(28.0f, 9.0f, 10.0f, 14.0f);
+    // Interactive Color Swatch Button (Click to change instance color)
+    const auto swatchArea = getSwatchBounds();
     g.setColour(trackColour);
-    g.fillRoundedRectangle(swatchArea, 3.0f);
+    g.fillRoundedRectangle(swatchArea, 4.0f);
+
+    if (isHoveringSwatch)
+    {
+        g.setColour(juce::Colours::white);
+        g.drawRoundedRectangle(swatchArea.expanded(1.2f), 4.5f, 1.6f);
+    }
+    else
+    {
+        g.setColour(juce::Colours::white.withAlpha(0.35f));
+        g.drawRoundedRectangle(swatchArea, 4.0f, 1.0f);
+    }
 
     // Track Name Text
     g.setColour(isLocal ? juce::Colours::white : juce::Colour(0xFFD6DBDF));
     g.setFont(juce::FontOptions(12.0f).withStyle(isLocal ? "Bold" : "Regular"));
     juce::String displayName = trackName;
     if (isLocal) displayName += " (Local)";
-    g.drawText(displayName, 44, 6, 100, 20, juce::Justification::centredLeft, true);
+    const int nameMaxWidth = std::max(60, static_cast<int>(bounds.getWidth()) - 180);
+    g.drawText(displayName, 48, 6, nameMaxWidth, 20, juce::Justification::centredLeft, true);
 
-    // Collision % Badge (for remote tracks)
+    // Masking Clash % Badge (for remote tracks) or Reference Target Badge (for local track)
+    const auto badgeArea = juce::Rectangle<float>(bounds.getWidth() - 126.0f, 7.0f, 68.0f, 18.0f);
+
     if (!isLocal)
     {
-        const auto badgeArea = juce::Rectangle<float>(bounds.getWidth() - 110.0f, 7.0f, 44.0f, 18.0f);
-
         juce::Colour badgeCol;
         if (currentCollisionPercent < 15.0f)
-            badgeCol = juce::Colour(0xFF06D6A0); // Calm green
+            badgeCol = juce::Colour(0xFF06D6A0); // Calm green (Low overlap)
         else if (currentCollisionPercent < 35.0f)
-            badgeCol = juce::Colour(0xFFFFBE0B); // Caution amber
+            badgeCol = juce::Colour(0xFFFFBE0B); // Caution amber (Moderate overlap)
         else
-            badgeCol = juce::Colour(0xFFFF3333); // Severe alert red
+            badgeCol = juce::Colour(0xFFFF3333); // Severe alert red (High masking clash)
 
-        g.setColour(badgeCol.withAlpha(0.2f));
-        g.fillRoundedRectangle(badgeArea, 3.0f);
-        g.setColour(badgeCol);
-        g.drawRoundedRectangle(badgeArea, 3.0f, 1.0f);
+        g.setColour(badgeCol.withAlpha(0.20f));
+        g.fillRoundedRectangle(badgeArea, 3.5f);
+        g.setColour(badgeCol.withAlpha(0.90f));
+        g.drawRoundedRectangle(badgeArea, 3.5f, 1.0f);
 
-        g.setFont(juce::FontOptions(10.0f).withStyle("Bold"));
-        const juce::String badgeText = juce::String(static_cast<int>(std::round(currentCollisionPercent))) + "%";
+        g.setFont(juce::FontOptions(9.5f).withStyle("Bold"));
+        const int pct = static_cast<int>(std::round(currentCollisionPercent));
+        const juce::String badgeText = "Clash " + juce::String(pct) + "%";
         g.drawText(badgeText, badgeArea, juce::Justification::centred);
+    }
+    else
+    {
+        g.setColour(juce::Colour(0xFF283246));
+        g.fillRoundedRectangle(badgeArea, 3.5f);
+        g.setColour(juce::Colour(0xFF4C6085));
+        g.drawRoundedRectangle(badgeArea, 3.5f, 1.0f);
+        g.setColour(juce::Colour(0xFFAAB8D0));
+        g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
+        g.drawText("REF TARGET", badgeArea, juce::Justification::centred);
+    }
+}
+
+void InstanceRowComponent::mouseMove(const juce::MouseEvent& e)
+{
+    const bool hovering = getSwatchBounds().expanded(3.0f).contains(e.position);
+    if (hovering != isHoveringSwatch)
+    {
+        isHoveringSwatch = hovering;
+        setMouseCursor(hovering ? juce::MouseCursor::PointingHandCursor : juce::MouseCursor::NormalCursor);
+        repaint();
+    }
+}
+
+void InstanceRowComponent::mouseExit(const juce::MouseEvent&)
+{
+    if (isHoveringSwatch)
+    {
+        isHoveringSwatch = false;
+        setMouseCursor(juce::MouseCursor::NormalCursor);
+        repaint();
+    }
+}
+
+void InstanceRowComponent::mouseDown(const juce::MouseEvent& e)
+{
+    if (getSwatchBounds().expanded(3.0f).contains(e.position))
+    {
+        if (e.mods.isPopupMenu())
+        {
+            // Right-click: quickly cycle through preset palette colours
+            const auto& palette = getPresetTrackColors();
+            size_t nextIdx = 0;
+            for (size_t i = 0; i < palette.size(); ++i)
+            {
+                if (juce::Colour(palette[i]).getARGB() == trackColour.getARGB())
+                {
+                    nextIdx = (i + 1) % palette.size();
+                    break;
+                }
+            }
+            const juce::Colour newCol(palette[nextIdx]);
+            trackColour = newCol;
+            InstanceHub::getInstance().setInstanceColour(id, newCol);
+            repaint();
+        }
+        else if (onColourSwatchClicked)
+        {
+            onColourSwatchClicked(id, trackName, trackColour);
+        }
     }
 }
 
@@ -153,17 +226,39 @@ void InstanceListOverlay::paint(juce::Graphics& g)
     g.setColour(juce::Colour(0xFF282E3D));
     g.drawRect(getLocalBounds(), 1);
 
+    const float w = static_cast<float>(getWidth());
+
+    // Explanation subtitle & color legend
+    g.setColour(juce::Colour(0xFF161B26));
+    g.fillRect(1.0f, 54.0f, w - 2.0f, 38.0f);
+
+    g.setColour(juce::Colour(0xFF8E99AD));
+    g.setFont(juce::FontOptions(9.5f));
+    g.drawText("Clash % = quota spettro Local coperta (clicca colore per cambiare)",
+               10, 55, getWidth() - 16, 15, juce::Justification::centredLeft, true);
+
+    // Column Header Row
+    g.setColour(juce::Colour(0xFF23293A));
+    g.drawHorizontalLine(72, 1.0f, w - 1.0f);
+
+    g.setColour(juce::Colour(0xFF7C889E));
+    g.setFont(juce::FontOptions(9.0f).withStyle("Bold"));
+    g.drawText("COL / TRACCIA", 26, 74, 110, 15, juce::Justification::centredLeft);
+    g.drawText("CLASH vs LOCAL", getWidth() - 130, 74, 76, 15, juce::Justification::centred);
+    g.drawText("S / M", getWidth() - 52, 74, 46, 15, juce::Justification::centred);
+
     // Section separator line
-    g.drawHorizontalLine(68, 0.0f, static_cast<float>(getWidth()));
+    g.setColour(juce::Colour(0xFF282E3D));
+    g.drawHorizontalLine(92, 0.0f, w);
 }
 
 void InstanceListOverlay::resized()
 {
     headerLabel.setBounds(12, 6, getWidth() - 24, 20);
-    thresholdLabel.setBounds(12, 32, 95, 20);
-    thresholdSlider.setBounds(110, 32, getWidth() - 120, 20);
+    thresholdLabel.setBounds(12, 30, 95, 20);
+    thresholdSlider.setBounds(110, 30, getWidth() - 120, 20);
 
-    viewport.setBounds(1, 69, getWidth() - 2, getHeight() - 70);
+    viewport.setBounds(1, 93, getWidth() - 2, getHeight() - 94);
     refreshInstances();
 }
 
@@ -221,6 +316,10 @@ void InstanceListOverlay::refreshInstances()
             };
             row->onMuteToggled = [](const juce::Uuid& instId, bool mute) {
                 InstanceHub::getInstance().setInstanceMute(instId, mute);
+            };
+            row->onColourSwatchClicked = [this](const juce::Uuid& instId, const juce::String& name, juce::Colour col) {
+                if (onInstanceColourSwatchClicked)
+                    onInstanceColourSwatchClicked(instId, name, col);
             };
 
             listContainer.addAndMakeVisible(row.get());

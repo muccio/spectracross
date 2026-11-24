@@ -33,6 +33,7 @@ public:
     void setInstanceVisibility(const juce::Uuid& id, bool isVisible);
     void setInstanceSolo(const juce::Uuid& id, bool isSoloed);
     void setInstanceMute(const juce::Uuid& id, bool isMuted);
+    void setInstanceColour(const juce::Uuid& id, juce::Colour colour);
 
     /** Publishes a downsampled spectral frame (512 display points + Bark data).
         Thread-safe and fast.

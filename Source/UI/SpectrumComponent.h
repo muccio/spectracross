@@ -34,6 +34,7 @@ public:
 
     // Callbacks
     std::function<void(int)> onHoveredMidiNoteChanged;
+    std::function<void(const std::array<float, kNumDisplayBins>&)> onCollisionProfileUpdated;
 
     void paint(juce::Graphics& g) override;
     void resized() override;

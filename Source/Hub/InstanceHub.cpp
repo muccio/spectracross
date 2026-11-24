@@ -155,6 +155,25 @@ void InstanceHub::setInstanceMute(const juce::Uuid& id, bool isMuted)
     }
 }
 
+void InstanceHub::setInstanceColour(const juce::Uuid& id, juce::Colour colour)
+{
+    std::lock_guard<std::mutex> lock(mutateMutex);
+
+    auto oldMap = std::atomic_load_explicit(&currentSnapshot, std::memory_order_relaxed);
+    auto newMap = std::make_shared<InstanceSnapshotMap>(*oldMap);
+
+    auto it = std::find_if(newMap->begin(), newMap->end(),
+                           [&id](const InstanceFramePtr& ptr) { return ptr && ptr->instanceId == id; });
+
+    if (it != newMap->end())
+    {
+        auto updated = std::make_shared<InstanceSpectralFrame>(**it);
+        updated->trackColour = colour;
+        *it = updated;
+        std::atomic_store_explicit(&currentSnapshot, std::shared_ptr<const InstanceSnapshotMap>(newMap), std::memory_order_release);
+    }
+}
+
 void InstanceHub::publishSpectralFrame(const juce::Uuid& id, const InstanceSpectralFrame& frame)
 {
     std::lock_guard<std::mutex> lock(mutateMutex);
@@ -174,26 +193,26 @@ void InstanceHub::publishSpectralFrame(const juce::Uuid& id, const InstanceSpect
             auto updated = std::make_shared<InstanceSpectralFrame>(frame);
             updated->instanceId = id;
             updated->lastPublishTimeMs = nowMs;
-            // Retain user display states and track metadata
+            // Always retain hub-managed user display states and track colour/name
             updated->isVisibleInDisplay = item->isVisibleInDisplay;
             updated->isSoloed = item->isSoloed;
             updated->isMuted = item->isMuted;
             updated->isBypassed = item->isBypassed;
 
-            if (frame.trackName.isNotEmpty())
-                updated->trackName = frame.trackName;
-            else
+            if (item->trackName.isNotEmpty())
                 updated->trackName = item->trackName;
-
-            if (frame.trackColour != juce::Colour())
-                updated->trackColour = frame.trackColour;
             else
+                updated->trackName = frame.trackName;
+
+            if (item->trackColour != juce::Colour())
                 updated->trackColour = item->trackColour;
-
-            if (frame.trackIndex >= 0)
-                updated->trackIndex = frame.trackIndex;
             else
+                updated->trackColour = frame.trackColour;
+
+            if (item->trackIndex >= 0)
                 updated->trackIndex = item->trackIndex;
+            else
+                updated->trackIndex = frame.trackIndex;
 
             newMap->push_back(updated);
             found = true;

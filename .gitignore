@@ -2,6 +2,7 @@
 build/
 build_*/
 bin/
+artifacts/
 *.o
 *.obj
 *.so

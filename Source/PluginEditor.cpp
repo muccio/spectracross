@@ -39,7 +39,32 @@ void SpectraCrossAudioProcessorEditor::setupCallbacks()
 {
     // Color Swatch and Name overrides
     topBar.onColourSwatchClicked = [this]() {
-        showColorPickerModal(!isColorPickerVisible);
+        if (isColorPickerVisible && colorPickerTargetId == processorRef.getInstanceId())
+        {
+            showColorPickerModal(false);
+        }
+        else
+        {
+            openColorPickerForInstance(
+                processorRef.getInstanceId(),
+                processorRef.getMetadataFetcher().getEffectiveTrackName(),
+                processorRef.getMetadataFetcher().getEffectiveTrackColour(),
+                false
+            );
+        }
+    };
+
+    instanceSidebar.onInstanceColourSwatchClicked = [this](const juce::Uuid& instId,
+                                                           const juce::String& instName,
+                                                           juce::Colour currentCol) {
+        if (isColorPickerVisible && colorPickerTargetId == instId)
+        {
+            showColorPickerModal(false);
+        }
+        else
+        {
+            openColorPickerForInstance(instId, instName, currentCol, true);
+        }
     };
 
     topBar.onTrackNameChanged = [this](const juce::String& newName) {
@@ -59,21 +84,26 @@ void SpectraCrossAudioProcessorEditor::setupCallbacks()
     };
 
     colorPickerModal.onColourChanged = [this](juce::Colour col) {
-        processorRef.getMetadataFetcher().setCustomTrackColour(col);
-        topBar.setTrackColour(col);
-        spectrumView.setLocalTrackColour(col);
-        processorRef.getSpectrumProcessor().setTrackMetadata(
-            processorRef.getMetadataFetcher().getEffectiveTrackName(),
-            col,
-            processorRef.getMetadataFetcher().getTrackIndex()
-        );
-        InstanceHub::getInstance().updateInstanceMetadata(
-            processorRef.getInstanceId(),
-            processorRef.getMetadataFetcher().getEffectiveTrackName(),
-            col,
-            processorRef.getMetadataFetcher().getTrackIndex(),
-            false
-        );
+        const juce::Uuid targetId = colorPickerTargetId.isNull()
+                                        ? processorRef.getInstanceId()
+                                        : colorPickerTargetId;
+
+        InstanceHub::getInstance().setInstanceColour(targetId, col);
+
+        if (targetId == processorRef.getInstanceId())
+        {
+            processorRef.getMetadataFetcher().setCustomTrackColour(col);
+            topBar.setTrackColour(col);
+            spectrumView.setLocalTrackColour(col);
+            processorRef.getSpectrumProcessor().setTrackMetadata(
+                processorRef.getMetadataFetcher().getEffectiveTrackName(),
+                col,
+                processorRef.getMetadataFetcher().getTrackIndex()
+            );
+        }
+
+        instanceSidebar.refreshInstances();
+        spectrumView.repaint();
     };
 
     colorPickerModal.onCloseRequested = [this]() {
@@ -144,6 +174,11 @@ void SpectraCrossAudioProcessorEditor::setupCallbacks()
         pianoRoll.setHoveredMidiNote(note);
     };
 
+    // Real-time Energy Clash heatmap synchronization above Piano Roll
+    spectrumView.onCollisionProfileUpdated = [this](const std::array<float, kNumDisplayBins>& profile) {
+        pianoRoll.setClashIntensityProfile(profile);
+    };
+
     // SMR threshold synchronization
     instanceSidebar.onSMRThresholdChanged = [this](float thresh) {
         processorRef.getSpectrumProcessor().setSmrThreshold(thresh);
@@ -152,14 +187,38 @@ void SpectraCrossAudioProcessorEditor::setupCallbacks()
     };
 }
 
+void SpectraCrossAudioProcessorEditor::openColorPickerForInstance(const juce::Uuid& targetId,
+                                                                  const juce::String& targetName,
+                                                                  juce::Colour currentCol,
+                                                                  bool fromSidebar)
+{
+    colorPickerTargetId = targetId;
+    colorPickerModal.setTargetTitle(targetName);
+    colorPickerModal.setCurrentColour(currentCol);
+    isColorPickerVisible = true;
+    colorPickerModal.setVisible(true);
+    colorPickerModal.toFront(true);
+
+    if (fromSidebar && isSidebarVisible)
+    {
+        const int xPos = std::max(10, instanceSidebar.getX() - 266);
+        colorPickerModal.setBounds(xPos, 46, 260, 280);
+    }
+    else
+    {
+        colorPickerModal.setBounds(10, 42, 260, 280);
+    }
+}
+
 void SpectraCrossAudioProcessorEditor::showColorPickerModal(bool show)
 {
     isColorPickerVisible = show;
     colorPickerModal.setVisible(show);
     if (show)
     {
+        if (colorPickerTargetId.isNull())
+            colorPickerTargetId = processorRef.getInstanceId();
         colorPickerModal.toFront(true);
-        colorPickerModal.setBounds(10, 42, 260, 280);
     }
 }
 
@@ -168,6 +227,21 @@ void SpectraCrossAudioProcessorEditor::timerCallback()
     // Keep instance count badge updated
     const int count = InstanceHub::getInstance().getNumInstances();
     topBar.updateInstanceCountBadge(count);
+
+    // If another instance's UI modified our colour in InstanceHub, adopt it locally
+    if (auto hubFrame = InstanceHub::getInstance().getInstanceFrame(processorRef.getInstanceId()))
+    {
+        const auto currentLocalCol = processorRef.getMetadataFetcher().getEffectiveTrackColour();
+        if (hubFrame->trackColour != juce::Colour() && hubFrame->trackColour != currentLocalCol)
+        {
+            processorRef.getMetadataFetcher().setCustomTrackColour(hubFrame->trackColour);
+            processorRef.getSpectrumProcessor().setTrackMetadata(
+                processorRef.getMetadataFetcher().getEffectiveTrackName(),
+                hubFrame->trackColour,
+                processorRef.getMetadataFetcher().getTrackIndex()
+            );
+        }
+    }
 
     // Sync DAW track metadata if host updated it dynamically
     const auto name = processorRef.getMetadataFetcher().getEffectiveTrackName();
@@ -192,15 +266,15 @@ void SpectraCrossAudioProcessorEditor::resized()
     // Sidebar on the right
     if (isSidebarVisible)
     {
-        const int sidebarWidth = std::min(280, bounds.getWidth() / 3);
+        const int sidebarWidth = std::min(300, std::max(275, bounds.getWidth() / 3));
         instanceSidebar.setBounds(bounds.removeFromRight(sidebarWidth));
     }
 
-    // Mini Piano Roll along the bottom of the analyzer
+    // Energy Clash Row (18px) + Mini Piano Roll (24px) along the bottom of the analyzer
     if (pianoRoll.isVisible())
     {
-        constexpr int pianoHeight = 24;
-        pianoRoll.setBounds(bounds.removeFromBottom(pianoHeight));
+        constexpr int pianoAndClashHeight = 42;
+        pianoRoll.setBounds(bounds.removeFromBottom(pianoAndClashHeight));
     }
 
     // Full remaining area for main spectrum display
@@ -208,7 +282,10 @@ void SpectraCrossAudioProcessorEditor::resized()
 
     if (isColorPickerVisible)
     {
-        colorPickerModal.setBounds(10, 42, 260, 280);
+        if (colorPickerTargetId != processorRef.getInstanceId() && isSidebarVisible)
+            colorPickerModal.setBounds(std::max(10, instanceSidebar.getX() - 266), 46, 260, 280);
+        else
+            colorPickerModal.setBounds(10, 42, 260, 280);
     }
 }
 

@@ -137,34 +137,40 @@ void MaskingAnalyzer::computeInterTrackCollisions(const std::array<float, kNumBa
     std::array<float, kNumBarkBands> barkCollisionIntensity {};
     barkCollisionIntensity.fill(0.0f);
 
-    float totalCollisionScore = 0.0f;
-    float activeBandsCount = 0.0f;
+    float weightedCollisionSum = 0.0f;
+    float totalLocalWeight = 0.0f;
 
     for (size_t b = 0; b < kNumBarkBands; ++b)
     {
         const float localEnergy = localBarkEnergy[b];
         const float remoteExcitation = remoteBarkExcitation[b];
 
-        // Masking is significant when both local signal and remote masker are audible
-        if (localEnergy > -75.0f && remoteExcitation > -75.0f)
+        // Consider bands where the local track actually has audible energy
+        if (localEnergy > -70.0f)
         {
-            activeBandsCount += 1.0f;
-            const float smr = localEnergy - remoteExcitation;
+            // Weight each Bark band by how prominent the local signal is above the -70 dB floor
+            const float bandWeight = std::max(1.0f, localEnergy - (-70.0f));
+            totalLocalWeight += bandWeight;
 
-            if (smr < smrThresholdDb)
+            if (remoteExcitation > -75.0f)
             {
-                const float violationDb = smrThresholdDb - smr;
-                // Normalize violation: 0 to 18 dB mapped to [0.0 .. 1.0]
-                const float intensity = juce::jlimit(0.0f, 1.0f, violationDb / 18.0f);
-                barkCollisionIntensity[b] = intensity;
-                totalCollisionScore += intensity;
+                const float smr = localEnergy - remoteExcitation;
+
+                if (smr < smrThresholdDb)
+                {
+                    const float violationDb = smrThresholdDb - smr;
+                    // Normalize violation: 0 to 18 dB mapped to [0.0 .. 1.0]
+                    const float intensity = juce::jlimit(0.0f, 1.0f, violationDb / 18.0f);
+                    barkCollisionIntensity[b] = intensity;
+                    weightedCollisionSum += intensity * bandWeight;
+                }
             }
         }
     }
 
-    if (activeBandsCount > 0.0f)
+    if (totalLocalWeight > 0.0f)
     {
-        outCollisionPercent = juce::jlimit(0.0f, 100.0f, (totalCollisionScore / activeBandsCount) * 100.0f);
+        outCollisionPercent = juce::jlimit(0.0f, 100.0f, (weightedCollisionSum / totalLocalWeight) * 100.0f);
     }
     else
     {

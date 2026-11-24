@@ -60,7 +60,7 @@ void ColorPickerComponent::paint(juce::Graphics& g)
     // Header
     g.setColour(juce::Colours::white);
     g.setFont(juce::FontOptions(13.0f).withStyle("Bold"));
-    g.drawText("Track Color Palette", 12, 8, getWidth() - 24, 20, juce::Justification::left);
+    g.drawText(headerTitle, 12, 8, getWidth() - 64, 20, juce::Justification::left, true);
 
     // Current Color Preview Pill
     auto previewArea = juce::Rectangle<int>(getWidth() - 48, 8, 36, 18);
