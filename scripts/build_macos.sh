@@ -51,6 +51,16 @@ VST3_SRC="build_mac/SpectraCross_artefacts/Release/VST3/SpectraCross.vst3"
 ls -ld "$AU_SRC" || true
 ls -ld "$VST3_SRC" || true
 
+# Fix permissions, clear extended attributes, and apply ad-hoc signature
+for BUNDLE in "$AU_SRC" "$VST3_SRC"; do
+    if [ -d "$BUNDLE" ]; then
+        chmod -R 755 "$BUNDLE"
+        chmod +x "$BUNDLE/Contents/MacOS/"*
+        xattr -cr "$BUNDLE"
+        codesign --force --deep --sign - "$BUNDLE"
+    fi
+done
+
 # 5. Optional Installation into system plugin directories
 echo ""
 read -p "Do you want to install plugins into ~/Library/Audio/Plug-Ins? [y/N] " -n 1 -r

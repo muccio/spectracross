@@ -60,14 +60,38 @@ jobs:
 
       - name: Package macOS Artifacts
         run: |
-          mkdir -p artifacts
+          mkdir -p artifacts/SpectraCross-macOS-Universal
           if [ -d "build/SpectraCross_artefacts/Release" ]; then
-            cd build/SpectraCross_artefacts/Release
-            zip -r ../../../artifacts/SpectraCross-macOS-Universal.zip AU/SpectraCross.component VST3/SpectraCross.vst3
+            SRC_DIR="build/SpectraCross_artefacts/Release"
           else
-            cd build/SpectraCross_artefacts
-            zip -r ../../artifacts/SpectraCross-macOS-Universal.zip AU/SpectraCross.component VST3/SpectraCross.vst3
+            SRC_DIR="build/SpectraCross_artefacts"
           fi
+
+          AU_BUNDLE="${SRC_DIR}/AU/SpectraCross.component"
+          VST3_BUNDLE="${SRC_DIR}/VST3/SpectraCross.vst3"
+
+          chmod -R 755 "${AU_BUNDLE}" "${VST3_BUNDLE}"
+          chmod +x "${AU_BUNDLE}/Contents/MacOS/"* "${VST3_BUNDLE}/Contents/MacOS/"*
+          xattr -cr "${AU_BUNDLE}" "${VST3_BUNDLE}"
+          codesign --force --deep --sign - "${AU_BUNDLE}"
+          codesign --force --deep --sign - "${VST3_BUNDLE}"
+
+          cp -R "${AU_BUNDLE}" artifacts/SpectraCross-macOS-Universal/
+          cp -R "${VST3_BUNDLE}" artifacts/SpectraCross-macOS-Universal/
+
+          cat << 'EOF' > artifacts/SpectraCross-macOS-Universal/Fix_macOS_Permissions.command
+          #!/bin/bash
+          DIR="$(cd "$(dirname "$0")" && pwd)"
+          echo "Rimozione quarantena Gatekeeper nella cartella: $DIR"
+          xattr -cr "$DIR"/*.component 2>/dev/null
+          xattr -cr "$DIR"/*.vst3 2>/dev/null
+          echo "Operazione completata! Ora puoi spostare il VST3 in /Library/Audio/Plug-Ins/VST3/ e l'AU in /Library/Audio/Plug-Ins/Components/."
+          read -p "Premi INVIO per chiudere..."
+          EOF
+          chmod +x artifacts/SpectraCross-macOS-Universal/Fix_macOS_Permissions.command
+
+          ditto -c -k --sequesterRsrc --keepParent artifacts/SpectraCross-macOS-Universal artifacts/SpectraCross-macOS-Universal.zip
+          rm -rf artifacts/SpectraCross-macOS-Universal
 
       - name: Upload macOS Universal Binaries
         uses: actions/upload-artifact@v4

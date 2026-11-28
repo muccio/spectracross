@@ -67,3 +67,25 @@ Every commit to `main` triggers automated builds producing:
 - `SpectraCross-Windows-x64.zip` (VST3 `.vst3` 64-bit)
 
 Download the latest pre-compiled binaries from the **Actions** tab artifacts!
+
+---
+
+## 🍎 Installazione su macOS (Risoluzione blocco Gatekeeper / "File danneggiato")
+
+Poiché le build open-source non sono firmate con un certificato Apple Developer a pagamento, macOS applica l'attributo di quarantena ai file scaricati dal browser, mostrando l'avviso *"è danneggiato e non può essere aperto"* (senza il pulsante "Apri comunque" nelle Impostazioni di Sistema).
+
+### 1. Rimuovere la quarantena prima della scansione DAW
+Puoi eseguire con doppio clic lo script **`Fix_macOS_Permissions.command`** incluso nell'archivio `.zip`, oppure aprire il **Terminale** e lanciare:
+```bash
+sudo xattr -cr "/Library/Audio/Plug-Ins/VST3/SpectraCross.vst3"
+sudo codesign --force --deep --sign - "/Library/Audio/Plug-Ins/VST3/SpectraCross.vst3"
+
+sudo xattr -cr "/Library/Audio/Plug-Ins/Components/SpectraCross.component"
+sudo codesign --force --deep --sign - "/Library/Audio/Plug-Ins/Components/SpectraCross.component"
+```
+
+### 2. Riattivare il plugin in Cubase (se già bloccato)
+Se hai già avviato Cubase prima di eseguire il comando sopra:
+1. Apri Cubase e vai su **Studio > Gestione plug-in VST**.
+2. Seleziona la scheda **Elenco dei plug-in bloccati** (Blocklist).
+3. Seleziona `SpectraCross.vst3`, clicca su **Riattiva** e confermalo.
